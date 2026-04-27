@@ -11,6 +11,7 @@ import { sessionRoutes } from './routes/session'
 import { terminalRoutes } from './routes/terminal'
 import fs from 'fs'
 import path from 'path'
+import { exec } from 'child_process'
 
 export interface ServerOptions {
   port?: number
@@ -102,4 +103,11 @@ docs:
 → http://${localIP}:${availablePort}/docs`
     : ''
   logger.info(`server started\n${urlLines}\n${docsLine}`)
+
+  const openUrl = `http://${localIP}:${availablePort}`
+  exec(`open "${openUrl}"`, (err) => {
+    if (err) {
+      logger.warn({ err }, 'failed to open browser')
+    }
+  })
 }
