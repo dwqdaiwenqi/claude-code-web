@@ -6,7 +6,7 @@
 
 基本使用：
 
-<image src="./preview.gif" style="margin:0 auto;width:900px;"/>
+<image src="./preview1.gif" style="margin:0 auto;width:900px;"/>
 
 前端友好，支持粘贴板图片：
 
