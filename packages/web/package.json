@@ -1,0 +1,54 @@
+{
+  "name": "@claude-web/ui",
+  "version": "0.1.1",
+  "description": "Web UI for Claude Code Agent — chat, file viewer, terminal",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "ai",
+    "agent",
+    "ui",
+    "react"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dwqdaiwenqi/claude-web-serve.git",
+    "directory": "packages/web"
+  },
+  "homepage": "https://github.com/dwqdaiwenqi/claude-web-serve#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^6.1.1",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
+    "antd": "^5.24.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-file-icon": "^1.6.0",
+    "react-markdown": "^10.1.0",
+    "react-mentions": "^4.4.10",
+    "react-router-dom": "^7.14.2",
+    "remark-gfm": "^4.0.1",
+    "shiki": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/react-mentions": "^4.4.1",
+    "@vitejs/plugin-react": "^4.3.0",
+    "less": "^4.6.4",
+    "typescript": "^5.8.0",
+    "vite": "^6.3.0"
+  }
+}

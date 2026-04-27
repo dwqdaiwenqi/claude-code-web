@@ -1,0 +1,11 @@
+import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import '@/styles/markdown.less'
+import '@/styles/global.less'
+import App from './App.tsx'
+
+createRoot(document.getElementById('root')!).render(
+  <BrowserRouter>
+    <App />
+  </BrowserRouter>
+)

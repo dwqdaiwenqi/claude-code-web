@@ -1,0 +1,191 @@
+# @claude-web/server
+
+将 [Claude Code Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) 封装为 HTTP API 服务，同时提供 `claude-web` CLI 工具。
+
+## 安装
+
+```bash
+npm install -g @claude-web/server
+```
+
+## CLI 命令
+
+```
+claude-web start [options]
+  -p, --port <number>      监听端口（默认：8003）
+  -H, --hostname <string>  绑定地址（默认：127.0.0.1）
+```
+
+启动后：
+
+- Web UI：`http://127.0.0.1:8003`
+- Swagger 文档：`http://127.0.0.1:8003/docs`
+
+## HTTP API
+
+Base URL：`http://127.0.0.1:8003/api`
+
+---
+
+### Project
+
+| 方法 | 路径 | 说明 |
+| ---- | ----------------------------------- | --------------------------------gst--------- |
+| GET | `/project` | 列出所有已关联的项目 |
+| GET | `/project/:id/session` | 获取项目下的会话列表 |
+| GET | `/project/:id/tree?path=/` | 获取文件目录树 |
+| GET | `/project/:id/file?path=/src/a.ts` | 读取文本文件内容（最大 1 MB） |
+| GET | `/project/:id/file/raw?path=/a.png` | 读取二进制文件（图片 / 音频，最大 20 MB） |
+
+**Project 对象：**
+
+```json
+{
+  "id": "a1b2c3d4e5f6a1b2",
+  "cwd": "/your/project",
+  "sessionCount": 3,
+  "updatedAt": 1700000001000
+}
+```
+
+Project ID 由目录路径推导，将路径分隔符替换为 `-`（如 `/home/user/proj` → `-home-user-proj`）。
+
+---
+
+### Session
+
+| 方法   | 路径                            | 说明                                                                |
+| ------ | ------------------------------- | ------------------------------------------------------------------- |
+| GET    | `/session/:id`                  | 获取会话信息（标题、状态、cwd 等）                                  |
+| DELETE | `/session/:id`                  | 删除会话（清理 .jsonl 文件与运行时状态）                            |
+| PATCH  | `/session/:id`                  | 重命名会话，body: `{ "title": string }`                             |
+| GET    | `/session/:id/message`          | 获取消息历史，query: `offset`                                       |
+| POST   | `/session/:id/message`          | 发送消息（阻塞模式）                                                |
+| POST   | `/session/:id/message?stream=1` | 发送消息（SSE 流式）                                                |
+| POST   | `/session/:id/message/resolve`  | 回答 AskUserQuestion，body: `{ "answers": { [question]: string } }` |
+
+**新建会话**：将 `:id` 设为 `new`，并在 body 中传入 `cwd`：
+
+```bash
+curl -X POST 'http://127.0.0.1:8003/api/session/new/message' \
+  -H 'Content-Type: application/json' \
+  -d '{"cwd":"/your/project","prompt":"你好"}'
+```
+
+**Session 对象：**
+
+```json
+{
+  "id": "ses_abc123",
+  "title": "第一条消息的预览...",
+  "cwd": "/your/project",
+  "status": "idle",
+  "lastModified": 1700000001000,
+  "gitBranch": "main"
+}
+```
+
+`status` 取值：`idle`（空闲）| `busy`（处理中）。向 busy 的会话发送消息会返回 409。
+
+---
+
+### 发送消息
+
+**请求 body：**
+
+```json
+{
+  "prompt": "你好",
+  "cwd": "/your/project",
+  "bypassPermissions": true
+}
+```
+
+或者使用结构化 `content` 块（支持文本 + 图片）：
+
+```json
+{
+  "content": [
+    { "type": "text", "text": "这张图里有什么？" },
+    { "type": "image", "mediaType": "image/png", "data": "<base64>" }
+  ]
+}
+```
+
+**阻塞模式** — 等待 Agent 完成后一次性返回：
+
+```bash
+# 第一步：新建会话并发消息
+curl -X POST 'http://127.0.0.1:8003/api/session/new/message' \
+  -H 'Content-Type: application/json' \
+  -d '{"cwd":"/your/project","prompt":"列出当前目录的文件"}'
+
+# 第二步：继续对话（使用返回的 sessionId）
+curl -X POST 'http://127.0.0.1:8003/api/session/<sessionId>/message' \
+  -H 'Content-Type: application/json' \
+  -d '{"prompt":"请解释一下 package.json"}'
+```
+
+**SSE 流式模式** — 加 `Accept: text/event-stream` 头或 `?stream=1`，实时推送内容：
+
+```bash
+curl -X POST 'http://127.0.0.1:8003/api/session/<sessionId>/message?stream=1' \
+  -H 'Content-Type: application/json' \
+  -d '{"prompt":"帮我写一个 README"}'
+```
+
+**SSE 事件类型：**
+
+| 事件       | data 格式                                                 | 说明                                          |
+| ---------- | --------------------------------------------------------- | --------------------------------------------- |
+| `message`  | `{ type, uuid, session_id, message, parent_tool_use_id }` | SDK 原始消息（文本 / 工具调用 / 工具结果）    |
+| `done`     | `{ sessionId, cost, tokens }`                             | Agent 完成，含费用与 token 用量（含缓存细分） |
+| `error`    | `{ message: string }`                                     | 执行出错                                      |
+| `ask_user` | `{ questions: [...] }`                                    | Agent 触发 AskUserQuestion，等待客户端回答    |
+
+**处理 `ask_user`：** 收到事件后，调用 resolve 接口提交答案，Agent 才会继续执行：
+
+```bash
+curl -X POST 'http://127.0.0.1:8003/api/session/<sessionId>/message/resolve' \
+  -H 'Content-Type: application/json' \
+  -d '{"answers":{"请确认操作":"yes"}}'
+```
+
+---
+
+### 终端
+
+```
+WebSocket  /api/terminal?cwd=/your/project
+```
+
+建立 WebSocket 连接后即获得一个完整的交互式 PTY 终端。
+
+- **服务端 → 客户端**：终端输出（字符串）
+- **客户端 → 服务端**：输入字符串，或 JSON `{ "type": "resize", "cols": 120, "rows": 30 }` 调整窗口大小
+
+---
+
+## 数据存储
+
+会话数据直接使用 Claude CLI 原生的 `~/.claude/projects/` 目录（JSONL 格式），与 CLI 完全共享：
+
+```
+~/.claude/projects/
+└── -your-project-path/
+    ├── <sessionId>.jsonl   # 每个会话一个文件，每行一条消息
+    └── ...
+```
+
+运行时状态（status、abort controller）仅保存在内存中，服务重启后会重置为 `idle`。
+
+---
+
+## 环境要求
+
+- Node.js >= 20
+- 已安装并登录 Claude Code CLI（`claude` 命令可用）
+
+## License
+
+MIT
