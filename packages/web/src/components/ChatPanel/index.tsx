@@ -1,5 +1,17 @@
 import { useRef, useEffect, useState } from 'react'
-import { Typography, Spin, Button, Card, Space, Tag, Badge, Switch, Tooltip } from 'antd'
+import {
+  Typography,
+  Spin,
+  Button,
+  Card,
+  Space,
+  Tag,
+  Badge,
+  Switch,
+  Tooltip,
+  Input,
+  Popover,
+} from 'antd'
 import { ArrowUpOutlined } from '@ant-design/icons'
 import type { AskUserQuestion, SsePart } from '@/http/index'
 import type { SessionMessage } from '@/http/index'
@@ -19,43 +31,87 @@ function AskUserCard({
   onResolve,
 }: {
   questions: AskUserQuestion[]
-  onResolve: (answers: Record<string, string>) => void
+  onResolve: (
+    answers: Record<string, string>,
+    annotations?: Record<string, { preview?: string; notes?: string }>
+  ) => void
 }) {
   const [selected, setSelected] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(questions.map((q) => [q.question, []]))
   )
+  const [otherInput, setOtherInput] = useState<Record<string, string>>({})
+  const [showOther, setShowOther] = useState<Record<string, boolean>>({})
   const [submitting, setSubmitting] = useState(false)
 
+  const OTHER_KEY = '__other__'
+
   function toggle(question: string, label: string, multi: boolean) {
+    if (label === OTHER_KEY) {
+      setShowOther((prev) => {
+        const next = !prev[question]
+        if (!next) setOtherInput((p) => ({ ...p, [question]: '' }))
+        setSelected((prev2) => ({ ...prev2, [question]: next ? [OTHER_KEY] : [] }))
+        return { ...prev, [question]: next }
+      })
+      return
+    }
+    setShowOther((prev) => ({ ...prev, [question]: false }))
+    setOtherInput((prev) => ({ ...prev, [question]: '' }))
     setSelected((prev) => {
       const cur = prev[question] ?? []
+      const filtered = cur.filter((l) => l !== OTHER_KEY)
       if (multi) {
         return {
           ...prev,
-          [question]: cur.includes(label) ? cur.filter((l) => l !== label) : [...cur, label],
+          [question]: filtered.includes(label)
+            ? filtered.filter((l) => l !== label)
+            : [...filtered, label],
         }
       }
       return { ...prev, [question]: [label] }
     })
   }
 
-  async function submit() {
+  function submit() {
     if (submitting) return
     setSubmitting(true)
     const answers: Record<string, string> = {}
+    const annotations: Record<string, { preview?: string; notes?: string }> = {}
+
     for (const q of questions) {
-      answers[q.question] = (selected[q.question] ?? []).join(', ')
+      const sel = selected[q.question] ?? []
+      if (sel.includes(OTHER_KEY)) {
+        answers[q.question] = otherInput[q.question] ?? ''
+      } else {
+        answers[q.question] = sel.join(', ')
+        // 收集所有已选 option 的 preview
+        const previews = sel
+          .map((label) => q.options.find((o) => o.label === label)?.preview)
+          .filter(Boolean) as string[]
+        if (previews.length > 0) {
+          annotations[q.question] = { preview: previews.join('\n\n') }
+        }
+      }
     }
-    await onResolve(answers)
+
+    const hasAnnotations = Object.keys(annotations).length > 0
+    onResolve(answers, hasAnnotations ? annotations : undefined)
   }
 
-  const allAnswered = questions.every((q) => (selected[q.question] ?? []).length > 0)
+  const allAnswered = questions.every((q) => {
+    const sel = selected[q.question] ?? []
+    if (sel.includes(OTHER_KEY)) return (otherInput[q.question] ?? '').trim().length > 0
+    return sel.length > 0
+  })
 
   return (
     <Card
       size="small"
       style={{ margin: '8px 0', borderColor: '#1677ff33', background: '#f0f5ff' }}
-      title={<span style={{ fontSize: 12, color: '#1677ff' }}>Claude 需要您的输入</span>}
+      title={<span style={{ fontSize: 12 }}>您希望我如何处理</span>}
+      bodyStyle={{
+        paddingTop: '0px',
+      }}
     >
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
         {questions.map((q) => (
@@ -66,22 +122,79 @@ function AskUserCard({
             <Space size={6} wrap>
               {q.options.map((opt) => {
                 const isSelected = (selected[q.question] ?? []).includes(opt.label)
-                return (
+                const tag = (
                   <Tag
                     key={opt.label}
                     color={isSelected ? 'blue' : 'default'}
                     style={{ cursor: 'pointer', userSelect: 'none', fontSize: 12 }}
                     onClick={() => toggle(q.question, opt.label, q.multiSelect)}
-                    title={opt.description}
                   >
                     {opt.label}
                   </Tag>
                 )
+                if (opt.preview) {
+                  return (
+                    <Popover
+                      key={opt.label}
+                      content={
+                        <pre
+                          style={{
+                            maxWidth: 360,
+                            maxHeight: 240,
+                            overflow: 'auto',
+                            fontSize: 11,
+                            margin: 0,
+                            whiteSpace: 'pre-wrap',
+                          }}
+                        >
+                          {opt.preview}
+                        </pre>
+                      }
+                      title={opt.description || opt.label}
+                      trigger="hover"
+                    >
+                      {tag}
+                    </Popover>
+                  )
+                }
+                return (
+                  <Tooltip key={opt.label} title={opt.description} mouseEnterDelay={0.4}>
+                    {tag}
+                  </Tooltip>
+                )
               })}
+              <Tag
+                color={showOther[q.question] ? 'blue' : 'default'}
+                style={{ cursor: 'pointer', userSelect: 'none', fontSize: 12 }}
+                onClick={() => toggle(q.question, OTHER_KEY, q.multiSelect)}
+              >
+                Other
+              </Tag>
             </Space>
+            {showOther[q.question] && (
+              <Input
+                size="small"
+                style={{ marginTop: 6 }}
+                placeholder="请输入自定义内容..."
+                value={otherInput[q.question] ?? ''}
+                onChange={(e) =>
+                  setOtherInput((prev) => ({ ...prev, [q.question]: e.target.value }))
+                }
+                onPressEnter={() => {
+                  if (allAnswered) submit()
+                }}
+                autoFocus
+              />
+            )}
           </div>
         ))}
-        <Button type="primary" size="small" disabled={!allAnswered || submitting} onClick={submit} loading={submitting}>
+        <Button
+          type="primary"
+          size="small"
+          disabled={!allAnswered || submitting}
+          onClick={submit}
+          loading={submitting}
+        >
           提交
         </Button>
       </Space>
@@ -150,7 +263,10 @@ interface ChatPanelProps {
   onPasteImage: (file: File) => void
   activeProjectID: string | null
   pendingQuestion: AskUserQuestion[] | null
-  onResolve: (answers: Record<string, string>) => void
+  onResolve: (
+    answers: Record<string, string>,
+    annotations?: Record<string, { preview?: string; notes?: string }>
+  ) => void
   bypassPermissions: boolean
   onBypassPermissionsChange: (v: boolean) => void
 }
@@ -213,6 +329,31 @@ export default function ChatPanel({
             loading={loading}
           />
           {pendingQuestion && <AskUserCard questions={pendingQuestion} onResolve={onResolve} />}
+
+          {/* <AskUserCard
+            questions={[
+              {
+                question: '你希望如何处理这个文件？',
+                header: '文件操作',
+                multiSelect: false,
+                options: [
+                  { label: '覆盖', description: '直接覆盖现有文件内容' },
+                  { label: '追加', description: '在文件末尾追加内容' },
+                  { label: '跳过', description: '保留原文件，不做任何修改' },
+                ],
+              },
+              {
+                question: '是否同时更新相关测试文件？',
+                header: '测试更新',
+                multiSelect: true,
+                options: [
+                  { label: '是', description: '自动更新对应的测试用例' },
+                  { label: '否', description: '仅修改源文件，不动测试' },
+                ],
+              },
+            ]}
+            onResolve={onResolve}
+          /> */}
 
           <div ref={bottomRef} />
         </div>

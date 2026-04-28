@@ -295,10 +295,10 @@ export default function ProjectPage() {
     }
   }
 
-  async function handleResolve(answers: Record<string, string>) {
+  async function handleResolve(answers: Record<string, string>, annotations?: Record<string, { preview?: string; notes?: string }>) {
     if (!pendingQuestion) return
     setPendingQuestion(null)
-    await api.resolveApproval(pendingQuestion.sessionId, answers)
+    await api.resolveApproval(pendingQuestion.sessionId, answers, annotations)
   }
 
   async function sendMessage() {

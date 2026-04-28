@@ -36,7 +36,7 @@ export type ContentBlock =
 export interface AskUserQuestion {
   question: string
   header: string
-  options: { label: string; description: string }[]
+  options: { label: string; description: string; preview?: string }[]
   multiSelect: boolean
 }
 
@@ -144,10 +144,14 @@ export const api = {
       }
     }),
 
-  resolveApproval: (id: string, answers: Record<string, string>): Promise<{ ok: boolean }> =>
+  resolveApproval: (
+    id: string,
+    answers: Record<string, string>,
+    annotations?: Record<string, { preview?: string; notes?: string }>
+  ): Promise<{ ok: boolean }> =>
     fetch(`${BASE}/session/${id}/message/resolve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answers }),
+      body: JSON.stringify({ answers, ...(annotations ? { annotations } : {}) }),
     }).then((r) => r.json()),
 }
