@@ -1,3 +1,5 @@
+[English](./README.en.md) | 简体中文
+
 # Claude Web
 
 将 [Claude Code Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) 封装为 REST API 服务，并提供开箱即用的 Web 界面。任何语言、任何平台都可以通过 HTTP 接口调用 Claude Code，也可以直接使用 Web 界面与 Claude 对话。
