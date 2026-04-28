@@ -104,10 +104,12 @@ docs:
     : ''
   logger.info(`server started\n${urlLines}\n${docsLine}`)
 
-  const openUrl = `http://${localIP}:${availablePort}`
-  exec(`open "${openUrl}"`, (err) => {
-    if (err) {
-      logger.warn({ err }, 'failed to open browser')
-    }
-  })
+  if (process.env.NODE_ENV !== 'development') {
+    const openUrl = `http://${localIP}:${availablePort}`
+    exec(`open "${openUrl}"`, (err) => {
+      if (err) {
+        logger.warn({ err }, 'failed to open browser')
+      }
+    })
+  }
 }

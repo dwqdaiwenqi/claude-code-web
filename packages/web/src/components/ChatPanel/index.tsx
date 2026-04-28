@@ -263,7 +263,7 @@ export default function ChatPanel({
               }
             >
               <Space size={6}>
-                <Text style={{ fontSize: 11, color: C.text2 }}>Human-in-loop</Text>
+                <Text style={{ fontSize: 11, color: C.text2 }}>Human-in-the-loop</Text>
                 <Switch
                   size="small"
                   checked={!bypassPermissions}
