@@ -24,6 +24,7 @@ function AskUserCard({
   const [selected, setSelected] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(questions.map((q) => [q.question, []]))
   )
+  const [submitting, setSubmitting] = useState(false)
 
   function toggle(question: string, label: string, multi: boolean) {
     setSelected((prev) => {
@@ -38,12 +39,14 @@ function AskUserCard({
     })
   }
 
-  function submit() {
+  async function submit() {
+    if (submitting) return
+    setSubmitting(true)
     const answers: Record<string, string> = {}
     for (const q of questions) {
       answers[q.question] = (selected[q.question] ?? []).join(', ')
     }
-    onResolve(answers)
+    await onResolve(answers)
   }
 
   const allAnswered = questions.every((q) => (selected[q.question] ?? []).length > 0)
@@ -78,7 +81,7 @@ function AskUserCard({
             </Space>
           </div>
         ))}
-        <Button type="primary" size="small" disabled={!allAnswered} onClick={submit}>
+        <Button type="primary" size="small" disabled={!allAnswered || submitting} onClick={submit} loading={submitting}>
           提交
         </Button>
       </Space>
