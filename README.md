@@ -2,6 +2,10 @@
 
 # Claude Web
 
+[![License](https://img.shields.io/github/license/dwqdaiwenqi/claude-code-web)](https://github.com/dwqdaiwenqi/claude-code-web/blob/main/LICENSE)
+[![CI](https://github.com/dwqdaiwenqi/claude-code-web/actions/workflows/ci.yml/badge.svg)](https://github.com/dwqdaiwenqi/claude-code-web/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/dwqdaiwenqi/claude-code-web)](https://github.com/dwqdaiwenqi/claude-code-web/releases)
+
 将 [Claude Code Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) 封装为 **REST/SSE HTTP 服务**，并附带开箱即用的 Web 界面。
 
 **任何语言、任何平台**都可以通过 HTTP 接口驱动 Claude Code，无需关心 SDK 细节。
