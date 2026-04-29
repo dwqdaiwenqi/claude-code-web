@@ -29,13 +29,13 @@ Base URL：`http://127.0.0.1:8003/api`
 
 ### Project
 
-| 方法 | 路径 | 说明 |
-| ---- | ----------------------------------- | --------------------------------gst--------- |
-| GET | `/project` | 列出所有已关联的项目 |
-| GET | `/project/:id/session` | 获取项目下的会话列表 |
-| GET | `/project/:id/tree?path=/` | 获取文件目录树 |
-| GET | `/project/:id/file?path=/src/a.ts` | 读取文本文件内容（最大 1 MB） |
-| GET | `/project/:id/file/raw?path=/a.png` | 读取二进制文件（图片 / 音频，最大 20 MB） |
+| 方法 | 路径                                | 说明                                      |
+| ---- | ----------------------------------- | ----------------------------------------- |
+| GET  | `/project`                          | 列出所有已关联的项目                      |
+| GET  | `/project/:id/session`              | 获取项目下的会话列表                      |
+| GET  | `/project/:id/tree?path=/`          | 获取文件目录树                            |
+| GET  | `/project/:id/file?path=/src/a.ts`  | 读取文本文件内容（最大 1 MB）             |
+| GET  | `/project/:id/file/raw?path=/a.png` | 读取二进制文件（图片 / 音频，最大 20 MB） |
 
 **Project 对象：**
 
