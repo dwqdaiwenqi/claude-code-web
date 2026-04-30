@@ -3,6 +3,9 @@ English | [简体中文](./README.md)
 # Claude Web
 
 [![License](https://img.shields.io/github/license/dwqdaiwenqi/claude-code-web)](https://github.com/dwqdaiwenqi/claude-code-web/blob/main/LICENSE)
+<img src="https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white" alt="Node.js 20+">
+<img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+<img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19">
 
 Wraps the [Claude Code Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) as a **REST/SSE HTTP service** with a built-in Web UI.
 
