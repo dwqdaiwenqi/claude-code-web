@@ -34,6 +34,7 @@ import FileViewer from '@/components/FileViewer/index.tsx'
 import ChatPanel from '@/components/ChatPanel/index.tsx'
 import { FileTreePanel, toTreeData } from '@/components/FileTreePanel/index.tsx'
 import FullSpin from '@/components/FullSpin'
+import DiffReview, { type FileDiff } from '@/components/DiffReview/index.tsx'
 import './index.less'
 
 const { Text } = Typography
@@ -73,6 +74,9 @@ export default function ProjectPage() {
   const [termOpen, setTermOpen] = useState(true)
   const [fileTree, setFileTree] = useState<TreeDataNode[]>([])
   const [selectedFile, setSelectedFile] = useState<{ path: string; content: string } | null>(null)
+  const [rightPanel, setRightPanel] = useState<'review' | 'file'>('review')
+  // sessionId → FileDiff[]，记录当前 session 中 Claude 修改过的文件
+  const [fileDiffs, setFileDiffs] = useState<FileDiff[]>([])
   const [fileLoading, setFileLoading] = useState(false)
   const [treeSearch, setTreeSearch] = useState('')
   const [bypassPermissions, setBypassPermissions] = useState(true)
@@ -145,12 +149,14 @@ export default function ProjectPage() {
     ].includes(ext)
     if (isMedia) {
       setSelectedFile({ path: filePath, content: '' })
+      setRightPanel('file')
       return
     }
     setFileLoading(true)
     try {
       const f = await api.getFile(projectId, filePath)
       setSelectedFile(f)
+      setRightPanel('file')
     } finally {
       setFileLoading(false)
     }
@@ -182,6 +188,98 @@ export default function ProjectPage() {
     return { ...sdkMessage, message: { ...(sdkMessage.message as any), content: filteredContent } }
   }
 
+  function mergeDiffs(prev: FileDiff[], incoming: FileDiff[]): FileDiff[] {
+    const result = [...prev]
+    for (const d of incoming) {
+      const idx = result.findIndex((x) => x.file === d.file)
+      if (idx === -1) {
+        result.push(d)
+      } else {
+        const e = result[idx]
+        result[idx] = {
+          ...e,
+          after: d.after,
+          additions: e.additions + d.additions,
+          deletions: e.deletions + d.deletions,
+          status: e.status === 'added' ? 'added' : d.status,
+        }
+      }
+    }
+    return result
+  }
+
+  function extractDiffsFromMessages(sdkMsgs: SessionMessage[]): FileDiff[] {
+    const diffMap = new Map<string, FileDiff>()
+    for (const m of sdkMsgs) {
+      if (m.type !== 'assistant') continue
+      const blocks: any[] = Array.isArray((m.message as any)?.content)
+        ? (m.message as any).content
+        : []
+      for (const block of blocks) {
+        if (block.type !== 'tool_use') continue
+        const inp = block.input ?? {}
+        if (block.name === 'Write') {
+          const filePath: string = inp.file_path ?? ''
+          const after: string = inp.content ?? ''
+          if (!filePath) continue
+          const existing = diffMap.get(filePath)
+
+          console.log('Write block:', block)
+          if (existing) {
+            diffMap.set(filePath, {
+              ...existing,
+              after,
+              status: 'modified',
+              additions: after.split('\n').length,
+              deletions: existing.before.split('\n').length,
+            })
+          } else {
+            diffMap.set(filePath, {
+              file: filePath,
+              status: 'added',
+              before: '',
+              after,
+              additions: after.split('\n').length,
+              deletions: 0,
+            })
+          }
+        } else if (block.name === 'Edit') {
+          const filePath: string = inp.file_path ?? ''
+          const oldStr: string = inp.old_string ?? ''
+          const newStr: string = inp.new_string ?? ''
+          if (!filePath) continue
+
+          console.log('Edit block:', block)
+
+          const existing = diffMap.get(filePath)
+          const before = existing ? existing.before || oldStr : oldStr
+          const prevAfter = existing ? existing.after || oldStr : oldStr
+          const after = prevAfter.replace(oldStr, newStr)
+          const additions = newStr.split('\n').length
+          const deletions = oldStr.split('\n').length
+          if (existing) {
+            diffMap.set(filePath, {
+              ...existing,
+              after,
+              additions: existing.additions + additions,
+              deletions: existing.deletions + deletions,
+            })
+          } else {
+            diffMap.set(filePath, {
+              file: filePath,
+              status: 'modified',
+              before,
+              after,
+              additions,
+              deletions,
+            })
+          }
+        }
+      }
+    }
+    return Array.from(diffMap.values())
+  }
+
   async function loadMessages(id: string) {
     setMsgLoading(true)
     try {
@@ -196,9 +294,7 @@ export default function ProjectPage() {
 
           if (hasRealInput(content)) {
             const newMMsg = filterSdkMsg(m)
-            // console.log('newMsg', newMMsg)
             displayed.push({ id: m.uuid, role: 'user', sdkMessages: [newMMsg] })
-          } else {
           }
         } else if (m.type === 'assistant') {
           if (hasRealAssistantContent(m)) {
@@ -207,8 +303,7 @@ export default function ProjectPage() {
         }
       }
       setMessages(displayed)
-
-      console.log('displayed', displayed)
+      setFileDiffs(extractDiffsFromMessages(sdkMsgs))
     } finally {
       setMsgLoading(false)
     }
@@ -216,6 +311,7 @@ export default function ProjectPage() {
 
   async function selectSession(id: string) {
     setActiveId(id)
+    setFileDiffs([])
     await loadMessages(id)
   }
 
@@ -356,6 +452,14 @@ export default function ProjectPage() {
           setPendingQuestion({ sessionId: pendingNewCwd.current ? '' : sessionId, questions })
         },
         onMessage: (sdkMsg) => {
+          // 提取 Write / Edit 工具调用，累积到 fileDiffs
+          if (sdkMsg.type === 'assistant') {
+            const incoming = extractDiffsFromMessages([sdkMsg])
+            if (incoming.length > 0) {
+              setFileDiffs((prev) => mergeDiffs(prev, incoming))
+            }
+          }
+
           setMessages((prev) => {
             if (sdkMsg.type === 'user') {
               const content: any[] = Array.isArray((sdkMsg.message as any)?.content)
@@ -424,6 +528,26 @@ export default function ProjectPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const renderFile = () => {
+    return (
+      <>
+        {fileLoading && <Spin style={{ display: 'block', margin: '40px auto' }} />}
+        {!fileLoading && selectedFile && projectId && (
+          <FileViewer
+            projectID={projectId}
+            filePath={selectedFile.path}
+            content={selectedFile.content}
+          />
+        )}
+        {!fileLoading && !selectedFile && (
+          <div style={{ color: C.text2, fontSize: 12, textAlign: 'center', marginTop: 60 }}>
+            暂未查看文件
+          </div>
+        )}
+      </>
+    )
   }
 
   return (
@@ -628,47 +752,31 @@ export default function ProjectPage() {
                       background: C.bg0,
                       borderBottom: `1px solid ${C.bg3}`,
                       display: 'flex',
-                      alignItems: 'stretch',
+                      alignItems: 'center',
                       flexShrink: 0,
-                      overflowX: 'auto',
+                      gap: '8px',
+                      paddingLeft: '12px',
                     }}
                   >
-                    {selectedFile ? (
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          padding: '0 14px',
-                          gap: 6,
-                          background: C.bg1,
-                          borderRight: `1px solid ${C.bg3}`,
-                          borderTop: '2px solid #1677ff',
-                          fontSize: 13,
-                          color: C.text0,
-                          whiteSpace: 'nowrap',
-                        }}
+                    <Button
+                      color="default"
+                      variant={'filled'}
+                      size="small"
+                      onClick={() => setRightPanel('review')}
+                    >
+                      变更
+                    </Button>
+
+                    {selectedFile && (
+                      <Button
+                        color="default"
+                        variant={'filled'}
+                        size="small"
+                        icon={<FileOutlined style={{ fontSize: '10px' }} />}
+                        onClick={() => setRightPanel('file')}
                       >
-                        {/* <Button
-                          icon={<CloseOutlined />}
-                          size="small"
-                          color="default"
-                          variant="text"
-                          style={{ marginTop: 2, fontSize: 9, width: 18, height: 18 }}
-                        ></Button> */}
                         <span>{selectedFile.path.split('/').pop()}</span>
-                      </div>
-                    ) : (
-                      <div
-                        style={{
-                          padding: '0 14px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          color: C.text2,
-                          fontSize: 12,
-                        }}
-                      >
-                        未选择文件
-                      </div>
+                      </Button>
                     )}
                   </div>
                   <div
@@ -680,21 +788,7 @@ export default function ProjectPage() {
                       justifyContent: 'center',
                     }}
                   >
-                    {fileLoading && <Spin style={{ display: 'block', margin: '40px auto' }} />}
-                    {!fileLoading && selectedFile && projectId && (
-                      <FileViewer
-                        projectID={projectId}
-                        filePath={selectedFile.path}
-                        content={selectedFile.content}
-                      />
-                    )}
-                    {!fileLoading && !selectedFile && (
-                      <div
-                        style={{ color: C.text2, fontSize: 12, textAlign: 'center', marginTop: 60 }}
-                      >
-                        暂未查看文件
-                      </div>
-                    )}
+                    {rightPanel === 'review' ? <DiffReview diffs={fileDiffs} /> : renderFile()}
                   </div>
                 </Splitter.Panel>
 
